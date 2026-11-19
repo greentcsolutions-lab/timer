@@ -1,0 +1,163 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Countdown Timer</title>
+  <style>
+    /* Minimal base – override freely */
+    .countdown {
+      display: flex;
+      gap: 1.5rem;
+      font-family: system-ui, -apple-system, sans-serif;
+      text-align: center;
+      user-select: none;
+    }
+    .countdown > div {
+      min-width: 4.5rem;
+    }
+    .countdown .num {
+      font-size: 2.75rem;
+      font-weight: 700;
+      line-height: 1.1;
+      letter-spacing: 0.02em;
+    }
+    .countdown .label {
+      font-size: 0.7rem;
+      font-weight: 600;
+      letter-spacing: 0.08em;
+      margin-top: 0.35rem;
+      opacity: 0.7;
+    }
+
+    /* Admin freeze helper (only visible with ?admin=true) */
+    #freeze-helper {
+      display: none;
+      margin-top: 1.75rem;
+      padding: 1rem 1.25rem;
+      border: 1px solid #ccc;
+      border-radius: 8px;
+      font-family: ui-monospace, monospace;
+      font-size: 0.95rem;
+      max-width: 320px;
+    }
+    #freeze-helper.visible {
+      display: block;
+    }
+    #freeze-value {
+      font-weight: 600;
+      letter-spacing: 0.04em;
+      margin-right: 0.75rem;
+    }
+    #copy-btn {
+      padding: 0.35rem 0.75rem;
+      font-size: 0.85rem;
+      cursor: pointer;
+      border: 1px solid #999;
+      border-radius: 4px;
+      background: #f5f5f5;
+    }
+    #copy-btn:hover {
+      background: #e8e8e8;
+    }
+    #copy-status {
+      margin-left: 0.6rem;
+      font-size: 0.8rem;
+      opacity: 0.7;
+    }
+  </style>
+</head>
+<body>
+
+  <!-- ===================== LIVE COUNTDOWN ===================== -->
+  <div class="countdown" id="countdown">
+    <div>
+      <div class="num" id="days">00</div>
+      <div class="label">DAYS</div>
+    </div>
+    <div>
+      <div class="num" id="hours">00</div>
+      <div class="label">HOURS</div>
+    </div>
+    <div>
+      <div class="num" id="mins">00</div>
+      <div class="label">MIN</div>
+    </div>
+    <div>
+      <div class="num" id="secs">00</div>
+      <div class="label">SEC</div>
+    </div>
+  </div>
+
+  <!-- ===================== ADMIN FREEZE HELPER ===================== -->
+  <div id="freeze-helper">
+    <span>Remaining:</span>
+    <span id="freeze-value">00:00:00:00</span>
+    <button id="copy-btn">Copy</button>
+    <span id="copy-status"></span>
+  </div>
+
+  <script>
+    // ============================================================
+    // 1. SET YOUR DEADLINE HERE (absolute timestamp – stays in sync
+    //    across refreshes and devices)
+    // ============================================================
+    // Default: 7 days from November 19, 2026 11:07 CST
+    const DEADLINE = new Date('2026-11-26T11:07:00-06:00').getTime();
+
+    // ============================================================
+    // Live countdown
+    // ============================================================
+    const daysEl  = document.getElementById('days');
+    const hoursEl = document.getElementById('hours');
+    const minsEl  = document.getElementById('mins');
+    const secsEl  = document.getElementById('secs');
+    const freezeValue = document.getElementById('freeze-value');
+
+    function pad(n) {
+      return String(n).padStart(2, '0');
+    }
+
+    function update() {
+      const now = Date.now();
+      let diff = Math.max(0, DEADLINE - now);
+
+      const days  = Math.floor(diff / (1000 * 60 * 60 * 24));
+      diff -= days * (1000 * 60 * 60 * 24);
+      const hours = Math.floor(diff / (1000 * 60 * 60));
+      diff -= hours * (1000 * 60 * 60);
+      const mins  = Math.floor(diff / (1000 * 60));
+      diff -= mins * (1000 * 60);
+      const secs  = Math.floor(diff / 1000);
+
+      daysEl.textContent  = pad(days);
+      hoursEl.textContent = pad(hours);
+      minsEl.textContent  = pad(mins);
+      secsEl.textContent  = pad(secs);
+
+      // Update freeze helper string
+      freezeValue.textContent = `${pad(days)}:${pad(hours)}:${pad(mins)}:${pad(secs)}`;
+    }
+
+    update();
+    setInterval(update, 1000);
+
+    // ============================================================
+    // Admin freeze helper (?admin=true)
+    // ============================================================
+    const params = new URLSearchParams(window.location.search);
+    if (params.get('admin') === 'true') {
+      document.getElementById('freeze-helper').classList.add('visible');
+    }
+
+    document.getElementById('copy-btn').addEventListener('click', () => {
+      const text = freezeValue.textContent;
+      navigator.clipboard.writeText(text).then(() => {
+        const status = document.getElementById('copy-status');
+        status.textContent = 'Copied!';
+        setTimeout(() => status.textContent = '', 1500);
+      });
+    });
+  </script>
+</body>
+</html>
