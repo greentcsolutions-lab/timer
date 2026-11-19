@@ -49,7 +49,7 @@
       opacity: 0.7;
     }
 
-    /* Admin freeze helper (only visible with ?admin=true) */
+    /* Admin freeze & controls (only visible with ?admin=true) */
     #freeze-helper {
       display: none;
       margin-top: 1.75rem;
@@ -57,33 +57,54 @@
       border: 1px solid #ccc;
       border-radius: 8px;
       font-family: ui-monospace, monospace;
-      font-size: 0.95rem;
-      max-width: 320px;
-      text-align: center;
+      font-size: 0.9rem;
+      width: 100%;
+      max-width: 380px;
+      text-align: left;
     }
     #freeze-helper.visible {
       display: block;
     }
+    .admin-row {
+      display: flex;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: 0.5rem;
+      margin-bottom: 0.75rem;
+    }
+    .admin-row:last-child {
+      margin-bottom: 0;
+    }
     #freeze-value {
       font-weight: 600;
       letter-spacing: 0.04em;
-      margin-right: 0.75rem;
     }
-    #copy-btn {
-      padding: 0.35rem 0.75rem;
+    #status-badge {
+      font-size: 0.75rem;
+      padding: 0.15rem 0.45rem;
+      border-radius: 4px;
+      background: #eee;
+    }
+    button, input[type="number"] {
+      padding: 0.35rem 0.65rem;
       font-size: 0.85rem;
-      cursor: pointer;
+      font-family: inherit;
       border: 1px solid #999;
       border-radius: 4px;
+    }
+    button {
+      cursor: pointer;
       background: #f5f5f5;
     }
-    #copy-btn:hover {
+    button:hover {
       background: #e8e8e8;
     }
+    input[type="number"] {
+      width: 5.5rem;
+    }
     #copy-status {
-      margin-left: 0.6rem;
       font-size: 0.8rem;
-      opacity: 0.7;
+      opacity: 0.75;
     }
 
     /* Mobile scaling so 4 columns never overflow narrow screens */
@@ -122,38 +143,76 @@
     </div>
   </div>
 
-  <!-- ===================== ADMIN FREEZE HELPER ===================== -->
+  <!-- ===================== ADMIN CONTROLS (?admin=true) ===================== -->
   <div id="freeze-helper">
-    <span>Remaining:</span>
-    <span id="freeze-value">00:00:00:00</span>
-    <button id="copy-btn">Copy</button>
-    <span id="copy-status"></span>
+    <div class="admin-row">
+      <span>Remaining:</span>
+      <strong id="freeze-value">00:00:00:00</strong>
+      <span id="status-badge">LIVE</span>
+      <button id="copy-btn" type="button">Copy</button>
+      <span id="copy-status"></span>
+    </div>
+
+    <div class="admin-row">
+      <button id="stop-btn" type="button">Stop Timer</button>
+      <button id="reset-btn" type="button">Reset Timer</button>
+    </div>
+
+    <div class="admin-row">
+      <label for="hours-input">Count from (hrs):</label>
+      <input id="hours-input" type="number" min="0.1" step="0.5" value="72" />
+      <button id="apply-hours-btn" type="button">Set</button>
+    </div>
   </div>
 
   <script>
     // ============================================================
-    // 1. SET YOUR DEADLINE HERE (absolute timestamp – stays in sync
-    //    across refreshes and devices)
+    // 1. DEFAULT DEADLINE (used when no local admin override exists)
     // ============================================================
-    // Default: 7 days from November 19, 2026 11:07 CST
-    const DEADLINE = new Date('2026-11-26T11:07:00-06:00').getTime();
+    const DEFAULT_DEADLINE = new Date('2026-11-26T11:07:00-06:00').getTime();
+    const DEFAULT_HOURS = 72;
 
-    // ============================================================
-    // Live countdown
-    // ============================================================
-    const daysEl  = document.getElementById('days');
-    const hoursEl = document.getElementById('hours');
-    const minsEl  = document.getElementById('mins');
-    const secsEl  = document.getElementById('secs');
+    const STORAGE_KEYS = {
+      deadline: 'timer_custom_deadline',
+      frozenMs: 'timer_frozen_ms',
+      hours: 'timer_custom_hours'
+    };
+
+    const daysEl      = document.getElementById('days');
+    const hoursEl     = document.getElementById('hours');
+    const minsEl      = document.getElementById('mins');
+    const secsEl      = document.getElementById('secs');
     const freezeValue = document.getElementById('freeze-value');
+    const statusBadge = document.getElementById('status-badge');
+    const stopBtn     = document.getElementById('stop-btn');
+    const resetBtn    = document.getElementById('reset-btn');
+    const hoursInput  = document.getElementById('hours-input');
+    const applyHoursBtn = document.getElementById('apply-hours-btn');
 
     function pad(n) {
       return String(n).padStart(2, '0');
     }
 
-    function update() {
-      const now = Date.now();
-      let diff = Math.max(0, DEADLINE - now);
+    function getConfiguredHours() {
+      const saved = parseFloat(localStorage.getItem(STORAGE_KEYS.hours));
+      return !isNaN(saved) && saved > 0 ? saved : DEFAULT_HOURS;
+    }
+
+    function getActiveDeadline() {
+      const saved = parseInt(localStorage.getItem(STORAGE_KEYS.deadline), 10);
+      return !isNaN(saved) && saved > 0 ? saved : DEFAULT_DEADLINE;
+    }
+
+    function getRemainingMs() {
+      const frozen = localStorage.getItem(STORAGE_KEYS.frozenMs);
+      if (frozen !== null) {
+        return Math.max(0, parseInt(frozen, 10) || 0);
+      }
+      return Math.max(0, getActiveDeadline() - Date.now());
+    }
+
+    function renderFromMs(ms) {
+      let diff = Math.max(0, ms);
 
       const days  = Math.floor(diff / (1000 * 60 * 60 * 24));
       diff -= days * (1000 * 60 * 60 * 24);
@@ -168,27 +227,72 @@
       minsEl.textContent  = pad(mins);
       secsEl.textContent  = pad(secs);
 
-      // Update freeze helper string
-      freezeValue.textContent = `${pad(days)}:${pad(hours)}:${pad(mins)}:${pad(secs)}`;
+      const formatted = `${pad(days)}:${pad(hours)}:${pad(mins)}:${pad(secs)}`;
+      freezeValue.textContent = formatted;
+
+      const isStopped = localStorage.getItem(STORAGE_KEYS.frozenMs) !== null;
+      statusBadge.textContent = isStopped ? 'STOPPED' : 'LIVE';
+      stopBtn.textContent = isStopped ? 'Resume Timer' : 'Stop Timer';
     }
 
+    function update() {
+      renderFromMs(getRemainingMs());
+    }
+
+    // Initialize input with current hours
+    hoursInput.value = getConfiguredHours();
     update();
     setInterval(update, 1000);
 
     // ============================================================
-    // Admin freeze helper (?admin=true)
+    // Admin freeze & timer controls (?admin=true)
     // ============================================================
     const params = new URLSearchParams(window.location.search);
     if (params.get('admin') === 'true') {
       document.getElementById('freeze-helper').classList.add('visible');
     }
 
+    // Stop or Resume timer
+    stopBtn.addEventListener('click', () => {
+      const frozen = localStorage.getItem(STORAGE_KEYS.frozenMs);
+      if (frozen !== null) {
+        // Resume from remaining frozen time
+        const remaining = parseInt(frozen, 10) || 0;
+        localStorage.setItem(STORAGE_KEYS.deadline, String(Date.now() + remaining));
+        localStorage.removeItem(STORAGE_KEYS.frozenMs);
+      } else {
+        // Freeze current remaining time
+        const remaining = Math.max(0, getActiveDeadline() - Date.now());
+        localStorage.setItem(STORAGE_KEYS.frozenMs, String(remaining));
+      }
+      update();
+    });
+
+    // Reset timer back to full configured hours starting now
+    resetBtn.addEventListener('click', () => {
+      const hrs = getConfiguredHours();
+      localStorage.removeItem(STORAGE_KEYS.frozenMs);
+      localStorage.setItem(STORAGE_KEYS.deadline, String(Date.now() + hrs * 60 * 60 * 1000));
+      update();
+    });
+
+    // Change the countdown duration (in hours) and start from now
+    applyHoursBtn.addEventListener('click', () => {
+      const hrs = parseFloat(hoursInput.value);
+      if (isNaN(hrs) || hrs <= 0) return;
+      localStorage.setItem(STORAGE_KEYS.hours, String(hrs));
+      localStorage.removeItem(STORAGE_KEYS.frozenMs);
+      localStorage.setItem(STORAGE_KEYS.deadline, String(Date.now() + hrs * 60 * 60 * 1000));
+      update();
+    });
+
+    // Copy frozen/remaining string
     document.getElementById('copy-btn').addEventListener('click', () => {
       const text = freezeValue.textContent;
       navigator.clipboard.writeText(text).then(() => {
         const status = document.getElementById('copy-status');
         status.textContent = 'Copied!';
-        setTimeout(() => status.textContent = '', 1500);
+        setTimeout(() => { status.textContent = ''; }, 1500);
       });
     });
   </script>
