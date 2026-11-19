@@ -5,32 +5,13 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Countdown Timer</title>
   <style>
-    /* Full-screen centering for all devices */
-    * {
-      box-sizing: border-box;
-    }
-    html, body {
-      margin: 0;
-      padding: 0;
-      width: 100%;
-      min-height: 100vh;
-      min-height: 100dvh;
-      display: flex;
-      flex-direction: column;
-      justify-content: center;
-      align-items: center;
-    }
-
     /* Minimal base – override freely */
     .countdown {
       display: flex;
-      justify-content: center;
-      align-items: center;
       gap: 1.5rem;
       font-family: system-ui, -apple-system, sans-serif;
       text-align: center;
       user-select: none;
-      padding: 1rem;
     }
     .countdown > div {
       min-width: 4.5rem;
@@ -49,7 +30,29 @@
       opacity: 0.7;
     }
 
-    /* Admin freeze & controls (only visible with ?admin=true) */
+    .controls {
+      margin-top: 1.5rem;
+      display: flex;
+      gap: 0.75rem;
+    }
+    .controls button {
+      padding: 0.6rem 1.4rem;
+      font-size: 0.95rem;
+      font-weight: 600;
+      cursor: pointer;
+      border: 1px solid #999;
+      border-radius: 6px;
+      background: #f5f5f5;
+    }
+    .controls button:hover {
+      background: #e8e8e8;
+    }
+    .controls button:disabled {
+      opacity: 0.45;
+      cursor: default;
+    }
+
+    /* Admin freeze helper (only visible with ?admin=true) */
     #freeze-helper {
       display: none;
       margin-top: 1.75rem;
@@ -57,67 +60,32 @@
       border: 1px solid #ccc;
       border-radius: 8px;
       font-family: ui-monospace, monospace;
-      font-size: 0.9rem;
-      width: 100%;
-      max-width: 380px;
-      text-align: left;
+      font-size: 0.95rem;
+      max-width: 320px;
     }
     #freeze-helper.visible {
       display: block;
     }
-    .admin-row {
-      display: flex;
-      align-items: center;
-      flex-wrap: wrap;
-      gap: 0.5rem;
-      margin-bottom: 0.75rem;
-    }
-    .admin-row:last-child {
-      margin-bottom: 0;
-    }
     #freeze-value {
       font-weight: 600;
       letter-spacing: 0.04em;
+      margin-right: 0.75rem;
     }
-    #status-badge {
-      font-size: 0.75rem;
-      padding: 0.15rem 0.45rem;
-      border-radius: 4px;
-      background: #eee;
-    }
-    button, input[type="number"] {
-      padding: 0.35rem 0.65rem;
+    #copy-btn {
+      padding: 0.35rem 0.75rem;
       font-size: 0.85rem;
-      font-family: inherit;
+      cursor: pointer;
       border: 1px solid #999;
       border-radius: 4px;
-    }
-    button {
-      cursor: pointer;
       background: #f5f5f5;
     }
-    button:hover {
+    #copy-btn:hover {
       background: #e8e8e8;
     }
-    input[type="number"] {
-      width: 5.5rem;
-    }
     #copy-status {
+      margin-left: 0.6rem;
       font-size: 0.8rem;
-      opacity: 0.75;
-    }
-
-    /* Mobile scaling so 4 columns never overflow narrow screens */
-    @media (max-width: 420px) {
-      .countdown {
-        gap: 0.75rem;
-      }
-      .countdown > div {
-        min-width: 3.5rem;
-      }
-      .countdown .num {
-        font-size: 2.15rem;
-      }
+      opacity: 0.7;
     }
   </style>
 </head>
@@ -143,76 +111,46 @@
     </div>
   </div>
 
-  <!-- ===================== ADMIN CONTROLS (?admin=true) ===================== -->
+  <div class="controls">
+    <button id="start-btn">Start</button>
+    <button id="stop-btn" disabled>Stop</button>
+  </div>
+
+  <!-- ===================== ADMIN FREEZE HELPER ===================== -->
   <div id="freeze-helper">
-    <div class="admin-row">
-      <span>Remaining:</span>
-      <strong id="freeze-value">00:00:00:00</strong>
-      <span id="status-badge">LIVE</span>
-      <button id="copy-btn" type="button">Copy</button>
-      <span id="copy-status"></span>
-    </div>
-
-    <div class="admin-row">
-      <button id="stop-btn" type="button">Stop Timer</button>
-      <button id="reset-btn" type="button">Reset Timer</button>
-    </div>
-
-    <div class="admin-row">
-      <label for="hours-input">Count from (hrs):</label>
-      <input id="hours-input" type="number" min="0.1" step="0.5" value="72" />
-      <button id="apply-hours-btn" type="button">Set</button>
-    </div>
+    <span>Remaining:</span>
+    <span id="freeze-value">00:00:00:00</span>
+    <button id="copy-btn">Copy</button>
+    <span id="copy-status"></span>
   </div>
 
   <script>
     // ============================================================
-    // 1. DEFAULT DEADLINE (used when no local admin override exists)
+    // 1. SET YOUR DEADLINE HERE (absolute timestamp)
+    //    Default: 7 days from Nov 19, 2026 11:07 CST
     // ============================================================
-    const DEFAULT_DEADLINE = new Date('2026-11-26T11:07:00-06:00').getTime();
-    const DEFAULT_HOURS = 72;
+    const DEADLINE = new Date('2026-11-26T11:07:00-06:00').getTime();
 
-    const STORAGE_KEYS = {
-      deadline: 'timer_custom_deadline',
-      frozenMs: 'timer_frozen_ms',
-      hours: 'timer_custom_hours'
-    };
-
+    // ============================================================
+    // Elements
+    // ============================================================
     const daysEl      = document.getElementById('days');
     const hoursEl     = document.getElementById('hours');
     const minsEl      = document.getElementById('mins');
     const secsEl      = document.getElementById('secs');
     const freezeValue = document.getElementById('freeze-value');
-    const statusBadge = document.getElementById('status-badge');
+    const startBtn    = document.getElementById('start-btn');
     const stopBtn     = document.getElementById('stop-btn');
-    const resetBtn    = document.getElementById('reset-btn');
-    const hoursInput  = document.getElementById('hours-input');
-    const applyHoursBtn = document.getElementById('apply-hours-btn');
+
+    let intervalId = null;
 
     function pad(n) {
       return String(n).padStart(2, '0');
     }
 
-    function getConfiguredHours() {
-      const saved = parseFloat(localStorage.getItem(STORAGE_KEYS.hours));
-      return !isNaN(saved) && saved > 0 ? saved : DEFAULT_HOURS;
-    }
-
-    function getActiveDeadline() {
-      const saved = parseInt(localStorage.getItem(STORAGE_KEYS.deadline), 10);
-      return !isNaN(saved) && saved > 0 ? saved : DEFAULT_DEADLINE;
-    }
-
-    function getRemainingMs() {
-      const frozen = localStorage.getItem(STORAGE_KEYS.frozenMs);
-      if (frozen !== null) {
-        return Math.max(0, parseInt(frozen, 10) || 0);
-      }
-      return Math.max(0, getActiveDeadline() - Date.now());
-    }
-
-    function renderFromMs(ms) {
-      let diff = Math.max(0, ms);
+    function update() {
+      const now = Date.now();
+      let diff = Math.max(0, DEADLINE - now);
 
       const days  = Math.floor(diff / (1000 * 60 * 60 * 24));
       diff -= days * (1000 * 60 * 60 * 24);
@@ -227,72 +165,56 @@
       minsEl.textContent  = pad(mins);
       secsEl.textContent  = pad(secs);
 
-      const formatted = `${pad(days)}:${pad(hours)}:${pad(mins)}:${pad(secs)}`;
-      freezeValue.textContent = formatted;
-
-      const isStopped = localStorage.getItem(STORAGE_KEYS.frozenMs) !== null;
-      statusBadge.textContent = isStopped ? 'STOPPED' : 'LIVE';
-      stopBtn.textContent = isStopped ? 'Resume Timer' : 'Stop Timer';
+      freezeValue.textContent = `${pad(days)}:${pad(hours)}:${pad(mins)}:${pad(secs)}`;
     }
 
-    function update() {
-      renderFromMs(getRemainingMs());
+    function startTimer() {
+      if (intervalId) return;
+      update();
+      intervalId = setInterval(update, 1000);
+      localStorage.setItem('countdownRunning', 'true');
+      startBtn.disabled = true;
+      stopBtn.disabled = false;
     }
 
-    // Initialize input with current hours
-    hoursInput.value = getConfiguredHours();
+    function stopTimer() {
+      if (intervalId) {
+        clearInterval(intervalId);
+        intervalId = null;
+      }
+      localStorage.setItem('countdownRunning', 'false');
+      startBtn.disabled = false;
+      stopBtn.disabled = true;
+      // Keep the current numbers visible (frozen)
+      update();
+    }
+
+    // Calculate the correct time immediately on load
     update();
-    setInterval(update, 1000);
+
+    // Restore previous state (so it keeps running after refresh)
+    if (localStorage.getItem('countdownRunning') === 'true') {
+      startTimer();
+    }
+
+    // Button handlers
+    startBtn.addEventListener('click', startTimer);
+    stopBtn.addEventListener('click', stopTimer);
 
     // ============================================================
-    // Admin freeze & timer controls (?admin=true)
+    // Admin freeze helper (?admin=true)
     // ============================================================
     const params = new URLSearchParams(window.location.search);
     if (params.get('admin') === 'true') {
       document.getElementById('freeze-helper').classList.add('visible');
     }
 
-    // Stop or Resume timer
-    stopBtn.addEventListener('click', () => {
-      const frozen = localStorage.getItem(STORAGE_KEYS.frozenMs);
-      if (frozen !== null) {
-        // Resume from remaining frozen time
-        const remaining = parseInt(frozen, 10) || 0;
-        localStorage.setItem(STORAGE_KEYS.deadline, String(Date.now() + remaining));
-        localStorage.removeItem(STORAGE_KEYS.frozenMs);
-      } else {
-        // Freeze current remaining time
-        const remaining = Math.max(0, getActiveDeadline() - Date.now());
-        localStorage.setItem(STORAGE_KEYS.frozenMs, String(remaining));
-      }
-      update();
-    });
-
-    // Reset timer back to full configured hours starting now
-    resetBtn.addEventListener('click', () => {
-      const hrs = getConfiguredHours();
-      localStorage.removeItem(STORAGE_KEYS.frozenMs);
-      localStorage.setItem(STORAGE_KEYS.deadline, String(Date.now() + hrs * 60 * 60 * 1000));
-      update();
-    });
-
-    // Change the countdown duration (in hours) and start from now
-    applyHoursBtn.addEventListener('click', () => {
-      const hrs = parseFloat(hoursInput.value);
-      if (isNaN(hrs) || hrs <= 0) return;
-      localStorage.setItem(STORAGE_KEYS.hours, String(hrs));
-      localStorage.removeItem(STORAGE_KEYS.frozenMs);
-      localStorage.setItem(STORAGE_KEYS.deadline, String(Date.now() + hrs * 60 * 60 * 1000));
-      update();
-    });
-
-    // Copy frozen/remaining string
     document.getElementById('copy-btn').addEventListener('click', () => {
       const text = freezeValue.textContent;
       navigator.clipboard.writeText(text).then(() => {
         const status = document.getElementById('copy-status');
         status.textContent = 'Copied!';
-        setTimeout(() => { status.textContent = ''; }, 1500);
+        setTimeout(() => status.textContent = '', 1500);
       });
     });
   </script>
