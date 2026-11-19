@@ -5,13 +5,32 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Countdown Timer</title>
   <style>
+    /* Full-screen centering for all devices */
+    * {
+      box-sizing: border-box;
+    }
+    html, body {
+      margin: 0;
+      padding: 0;
+      width: 100%;
+      min-height: 100vh;
+      min-height: 100dvh;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      align-items: center;
+    }
+
     /* Minimal base – override freely */
     .countdown {
       display: flex;
+      justify-content: center;
+      align-items: center;
       gap: 1.5rem;
       font-family: system-ui, -apple-system, sans-serif;
       text-align: center;
       user-select: none;
+      padding: 1rem;
     }
     .countdown > div {
       min-width: 4.5rem;
@@ -30,28 +49,6 @@
       opacity: 0.7;
     }
 
-    .controls {
-      margin-top: 1.5rem;
-      display: flex;
-      gap: 0.75rem;
-    }
-    .controls button {
-      padding: 0.6rem 1.4rem;
-      font-size: 0.95rem;
-      font-weight: 600;
-      cursor: pointer;
-      border: 1px solid #999;
-      border-radius: 6px;
-      background: #f5f5f5;
-    }
-    .controls button:hover {
-      background: #e8e8e8;
-    }
-    .controls button:disabled {
-      opacity: 0.45;
-      cursor: default;
-    }
-
     /* Admin freeze helper (only visible with ?admin=true) */
     #freeze-helper {
       display: none;
@@ -62,6 +59,7 @@
       font-family: ui-monospace, monospace;
       font-size: 0.95rem;
       max-width: 320px;
+      text-align: center;
     }
     #freeze-helper.visible {
       display: block;
@@ -87,6 +85,19 @@
       font-size: 0.8rem;
       opacity: 0.7;
     }
+
+    /* Mobile scaling so 4 columns never overflow narrow screens */
+    @media (max-width: 420px) {
+      .countdown {
+        gap: 0.75rem;
+      }
+      .countdown > div {
+        min-width: 3.5rem;
+      }
+      .countdown .num {
+        font-size: 2.15rem;
+      }
+    }
   </style>
 </head>
 <body>
@@ -111,11 +122,6 @@
     </div>
   </div>
 
-  <div class="controls">
-    <button id="start-btn">Start</button>
-    <button id="stop-btn" disabled>Stop</button>
-  </div>
-
   <!-- ===================== ADMIN FREEZE HELPER ===================== -->
   <div id="freeze-helper">
     <span>Remaining:</span>
@@ -126,23 +132,20 @@
 
   <script>
     // ============================================================
-    // 1. SET YOUR DEADLINE HERE (absolute timestamp)
-    //    Default: 7 days from Nov 19, 2026 11:07 CST
+    // 1. SET YOUR DEADLINE HERE (absolute timestamp – stays in sync
+    //    across refreshes and devices)
     // ============================================================
+    // Default: 7 days from November 19, 2026 11:07 CST
     const DEADLINE = new Date('2026-11-26T11:07:00-06:00').getTime();
 
     // ============================================================
-    // Elements
+    // Live countdown
     // ============================================================
-    const daysEl      = document.getElementById('days');
-    const hoursEl     = document.getElementById('hours');
-    const minsEl      = document.getElementById('mins');
-    const secsEl      = document.getElementById('secs');
+    const daysEl  = document.getElementById('days');
+    const hoursEl = document.getElementById('hours');
+    const minsEl  = document.getElementById('mins');
+    const secsEl  = document.getElementById('secs');
     const freezeValue = document.getElementById('freeze-value');
-    const startBtn    = document.getElementById('start-btn');
-    const stopBtn     = document.getElementById('stop-btn');
-
-    let intervalId = null;
 
     function pad(n) {
       return String(n).padStart(2, '0');
@@ -165,41 +168,12 @@
       minsEl.textContent  = pad(mins);
       secsEl.textContent  = pad(secs);
 
+      // Update freeze helper string
       freezeValue.textContent = `${pad(days)}:${pad(hours)}:${pad(mins)}:${pad(secs)}`;
     }
 
-    function startTimer() {
-      if (intervalId) return;
-      update();
-      intervalId = setInterval(update, 1000);
-      localStorage.setItem('countdownRunning', 'true');
-      startBtn.disabled = true;
-      stopBtn.disabled = false;
-    }
-
-    function stopTimer() {
-      if (intervalId) {
-        clearInterval(intervalId);
-        intervalId = null;
-      }
-      localStorage.setItem('countdownRunning', 'false');
-      startBtn.disabled = false;
-      stopBtn.disabled = true;
-      // Keep the current numbers visible (frozen)
-      update();
-    }
-
-    // Calculate the correct time immediately on load
     update();
-
-    // Restore previous state (so it keeps running after refresh)
-    if (localStorage.getItem('countdownRunning') === 'true') {
-      startTimer();
-    }
-
-    // Button handlers
-    startBtn.addEventListener('click', startTimer);
-    stopBtn.addEventListener('click', stopTimer);
+    setInterval(update, 1000);
 
     // ============================================================
     // Admin freeze helper (?admin=true)
